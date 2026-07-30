@@ -26,4 +26,5 @@ src/
 ```
 
 GPS is collected only at check-in. The app validates permission and an accuracy threshold locally; submit the coordinates to your backend and validate the organization’s geofence there before authoritatively creating the attendance record.
+
 # guard-attendence-app
