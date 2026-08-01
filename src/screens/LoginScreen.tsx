@@ -44,8 +44,6 @@ export function LoginScreen() {
         {/* Branding with local logo */}
         <View style={styles.brandingContainer}>
           <Image source={logoImg} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.falconText}>FALCON®</Text>
-          <Text style={styles.securityText}>SECURITY LIMITED</Text>
         </View>
 
         {/* Login Form Card */}
@@ -99,7 +97,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#F5F5F5' },
   container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
   brandingContainer: { alignItems: 'center', marginBottom: 28 },
-  logo: { width: 90, height: 90, marginBottom: 6 },
+  logo: { width: 120, height: 120, marginBottom: 6 },
   falconText: { fontSize: 28, fontWeight: '800', color: '#006B3F', letterSpacing: 1 },
   securityText: { fontSize: 12, fontWeight: '700', color: '#006B3F', letterSpacing: 1.2, marginTop: 2 },
   formCard: {
