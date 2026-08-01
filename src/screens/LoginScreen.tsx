@@ -59,8 +59,8 @@ export function LoginScreen() {
           <View style={styles.brandingContainer}>
             <Image source={{ uri: falconLogo }} style={styles.logo} />
             <View style={styles.brandingTextWrap}>
-              <Text style={styles.falconText}>FALCON®</Text>
-              <Text style={styles.securityText}>SECURITY LIMITED</Text>
+              <Text style={styles.falconText}>FALCON® </Text>
+              <Text style={styles.securityText}>    SECURITY LIMITED         </Text>
             </View>
           </View>
 
@@ -108,7 +108,7 @@ export function LoginScreen() {
           <TouchableOpacity activeOpacity={0.9} onPress={handleSubmit}>
             <LinearGradient colors={['#C88C2A', '#A86C1D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.outerRing}>
               <View style={styles.innerCircle}>
-                <Text style={styles.buttonText}>GO</Text>
+                <Text style={styles.buttonText}>GO </Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
