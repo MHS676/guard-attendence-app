@@ -2,7 +2,8 @@ import 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AuthProvider } from './src/context/AuthContext';
+
+import { AuthProvider } from './src/context/AuthContext'; // Named import from ./src/
 import { AttendanceProvider } from './src/context/AttendanceContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { theme } from './src/theme';

@@ -2,40 +2,56 @@ import { clearSession, getStoredSession } from './storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.72:5000';
 
-export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const session = await getStoredSession();
+interface ApiOptions extends RequestInit {
+  token?: string | null;
+}
+
+export async function apiFetch<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
+  const { token: explicitToken, ...fetchOptions } = options;
+  
+  // Use explicitly passed token first; fall back to storage read
+  let authToken = explicitToken;
+  if (!authToken) {
+    const session = await getStoredSession();
+    authToken = session?.token ?? null;
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
+    ...(fetchOptions.headers as Record<string, string>),
   };
 
-  if (session?.token) {
-    headers['Authorization'] = `Bearer ${session.token}`;
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
   }
 
   const fullUrl = `${API_URL}${endpoint}`;
-  console.log(`📡 [apiFetch Request] -> ${fullUrl}`);
+  console.log(
+    `📡 [apiFetch Request] -> ${fullUrl} (authorization: ${authToken ? 'attached' : 'missing'})`
+  );
 
   try {
     const response = await fetch(fullUrl, {
-      ...options,
+      ...fetchOptions,
       headers,
     });
 
     console.log(`✅ [apiFetch Response] status: ${response.status} from ${endpoint}`);
 
     if (response.status === 401) {
+      console.log('🔐 [apiFetch] 401 Unauthorized - clearing session and rejecting request');
       await clearSession();
+      throw new Error('Unauthorized');
     }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
-      throw new Error(errorData?.message || 'Request failed.');
+      throw new Error(errorData?.message || `Request failed with status ${response.status}`);
     }
 
     return (await response.json()) as Promise<T>;
   } catch (error) {
-    console.error(`❌ [apiFetch Network Error] Failed connecting to ${fullUrl}:`, error);
+    console.error(`❌ [apiFetch Request Error] ${fullUrl}:`, error);
     throw error;
   }
 }

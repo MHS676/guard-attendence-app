@@ -1,8 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -11,110 +9,295 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-
-// Import local logo from document/logo11.png
-const logoImg = require('../../document/logo11.png');
 
 export function LoginScreen() {
   const { signIn, rememberedEmail } = useAuth();
-  const [email, setEmail] = useState(rememberedEmail || 'demo@falconsecurity.com');
-  const [password, setPassword] = useState('Falcon@2026');
-  const [submitting, setSubmitting] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Missing Fields', 'Please enter your email and password.');
-      return;
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  // Error States
+  const [usernameError, setUsernameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [generalError, setGeneralError] = useState('');
+
+  useEffect(() => {
+    if (rememberedEmail) {
+      setUsername(rememberedEmail);
+    }
+  }, [rememberedEmail]);
+
+  const validate = (): boolean => {
+    let isValid = true;
+    setUsernameError('');
+    setPasswordError('');
+    setGeneralError('');
+
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername) {
+      setUsernameError('Employee ID or Email is required');
+      isValid = false;
     }
 
-    setSubmitting(true);
+    if (!cleanPassword) {
+      setPasswordError('Password is required');
+      isValid = false;
+    } else if (cleanPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters');
+      isValid = false;
+    }
+
+    return isValid;
+  };
+
+  const handleLogin = async () => {
+    if (!validate()) return;
+
+    setLoading(true);
     try {
-      await signIn(email, password, true);
-    } catch (error) {
-      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Invalid credentials.');
+      await signIn(username.trim(), password.trim(), rememberMe);
+    } catch (error: any) {
+      const msg = error?.message || 'Invalid credentials. Please try again.';
+      setGeneralError(msg);
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.container}>
-        {/* Branding with local logo */}
-        <View style={styles.brandingContainer}>
-          <Image source={logoImg} style={styles.logo} resizeMode="contain" />
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.inner}
+      >
+        <View style={styles.headerContainer}>
+          <Text style={styles.title}>Falcon Guard</Text>
+          <Text style={styles.subtitle}>Attendance & Operations Portal</Text>
         </View>
 
-        {/* Login Form Card */}
-        <View style={styles.formCard}>
-          <Text style={styles.title}>Sign In</Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email / Employee ID</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="e.g. demo@falconsecurity.com"
-              placeholderTextColor="#8E8E8E"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
-            />
+        {!!generalError && (
+          <View style={styles.generalErrorBox}>
+            <Text style={styles.generalErrorText}>⚠️ {generalError}</Text>
           </View>
+        )}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
+        <View style={styles.formContainer}>
+          <Text style={styles.label}>Employee ID / Email</Text>
+          <TextInput
+            style={[styles.input, !!usernameError && styles.inputError]}
+            placeholder="e.g. 1001 or demo@falconsecurity.com"
+            placeholderTextColor="#999999"
+            value={username}
+            onChangeText={(val) => {
+              setUsername(val);
+              if (usernameError) setUsernameError('');
+              if (generalError) setGeneralError('');
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {!!usernameError && <Text style={styles.fieldErrorText}>{usernameError}</Text>}
+
+          {/* Password Input Field with Eye Icon Toggle */}
+          <Text style={[styles.label, { marginTop: 14 }]}>Password</Text>
+          <View style={[styles.passwordContainer, !!passwordError && styles.inputError]}>
             <TextInput
-              value={password}
-              onChangeText={setPassword}
+              style={styles.passwordInput}
               placeholder="Enter your password"
-              placeholderTextColor="#8E8E8E"
-              secureTextEntry
-              style={styles.input}
+              placeholderTextColor="#999999"
+              value={password}
+              onChangeText={(val) => {
+                setPassword(val);
+                if (passwordError) setPasswordError('');
+                if (generalError) setGeneralError('');
+              }}
+              secureTextEntry={!showPassword}
             />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((prev) => !prev)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '🙈'}</Text>
+            </TouchableOpacity>
           </View>
+          {!!passwordError && <Text style={styles.fieldErrorText}>{passwordError}</Text>}
 
           <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.loginButton}
-            onPress={handleLogin}
-            disabled={submitting}
+            style={styles.checkboxRow}
+            onPress={() => setRememberMe(!rememberMe)}
+            activeOpacity={0.7}
           >
-            {submitting ? (
+            <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+              {rememberMe && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.rememberText}>Remember User ID</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.loginButtonText}>SIGN IN</Text>
+              <Text style={styles.buttonText}>Sign In</Text>
             )}
           </TouchableOpacity>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#F5F5F5' },
-  container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-  brandingContainer: { alignItems: 'center', marginBottom: 28 },
-  logo: { width: 120, height: 120, marginBottom: 6 },
-  falconText: { fontSize: 28, fontWeight: '800', color: '#006B3F', letterSpacing: 1 },
-  securityText: { fontSize: 12, fontWeight: '700', color: '#006B3F', letterSpacing: 1.2, marginTop: 2 },
-  formCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, gap: 16,
-    borderColor: '#E0E0E0', borderWidth: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
-  title: { fontSize: 20, fontWeight: '700', color: '#222222', marginBottom: 4 },
-  inputGroup: { gap: 6 },
-  label: { fontSize: 13, color: '#555555', fontWeight: '600' },
+  inner: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#006B3F',
+    letterSpacing: 0.5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666666',
+    marginTop: 4,
+  },
+  generalErrorBox: {
+    backgroundColor: '#FFEBEE',
+    borderColor: '#FFCDD2',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  generalErrorText: {
+    color: '#D32F2F',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  formContainer: {
+    width: '100%',
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 6,
+  },
   input: {
-    height: 48, backgroundColor: '#FAFAFA', borderColor: '#D9D9D9', borderWidth: 1,
-    borderRadius: 8, paddingHorizontal: 12, fontSize: 14, color: '#222222',
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: '#222222',
+    backgroundColor: '#FAFAFA',
   },
-  loginButton: {
-    height: 50, backgroundColor: '#006B3F', borderRadius: 8,
-    justifyContent: 'center', alignItems: 'center', marginTop: 8,
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    backgroundColor: '#FAFAFA',
+    paddingRight: 12,
   },
-  loginButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', letterSpacing: 1 },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: '#222222',
+  },
+  eyeButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyeIcon: {
+    fontSize: 18,
+  },
+  inputError: {
+    borderColor: '#D32F2F',
+    backgroundColor: '#FFF8F8',
+  },
+  fieldErrorText: {
+    color: '#D32F2F',
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1.5,
+    borderColor: '#006B3F',
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  checkboxChecked: {
+    backgroundColor: '#006B3F',
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  rememberText: {
+    fontSize: 14,
+    color: '#555555',
+  },
+  button: {
+    height: 50,
+    backgroundColor: '#006B3F',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
 });
