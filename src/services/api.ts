@@ -22,6 +22,10 @@ export async function apiFetch<T>(endpoint: string, options: ApiOptions = {}): P
   };
 
   if (authToken) {
+    // Log token length for debugging, but don't log the full token
+    const tokenLength = authToken.length;
+    const tokenPreview = authToken.substring(0, 20) + (authToken.length > 20 ? '...' : '');
+    console.log(`🔐 [apiFetch] Token attached (length: ${tokenLength}, preview: ${tokenPreview})`);
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
@@ -40,6 +44,7 @@ export async function apiFetch<T>(endpoint: string, options: ApiOptions = {}): P
 
     if (response.status === 401) {
       console.log('🔐 [apiFetch] 401 Unauthorized - clearing session and rejecting request');
+      console.log('🔍 [apiFetch] Possible causes: Invalid token, expired token, user not found in DB, JWT_SECRET mismatch');
       await clearSession();
       throw new Error('Unauthorized');
     }
