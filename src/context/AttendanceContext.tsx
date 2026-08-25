@@ -7,17 +7,17 @@ type AttendanceContextValue = {
   records: AttendanceRecord[];
   activeRecord: AttendanceRecord | undefined;
   checkIn: (payload: {
-    userId: string;
-    markedById: string;
+    userId?: string;
+    userIds?: string[];
     postId: string;
     date: string;
     time: string;
-    shiftHours: number;
-    status: string;
-    captureLatitude: number;
-    captureLongitude: number;
+    shiftHours?: number;
+    status?: string;
+    captureLatitude?: number;
+    captureLongitude?: number;
     captureAddress?: string;
-  }) => Promise<void>;
+  }) => Promise<{ success: boolean; message: string; guardCount?: number }>;
   fetchHistory: () => Promise<void>;
 };
 
@@ -56,13 +56,16 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
       const mappedRecords: AttendanceRecord[] = data.map((item) => ({
         id: item.id,
         date: item.date ? new Date(item.date).toISOString().slice(0, 10) : today(),
-        checkIn: item.time || item.createdAt || '08:00 AM',
+        checkIn: item.checkInTime || item.time || item.createdAt || '08:00 AM',
         status: item.status || 'PRESENT',
         location: {
           latitude: item.captureLatitude ?? 0,
           longitude: item.captureLongitude ?? 0,
           accuracy: item.accuracy ?? null,
         },
+        guardName: item.user?.name,
+        guardId: item.userId,
+        markedBy: item.markedBy?.name,
       }));
 
       setRecords(mappedRecords);
@@ -92,20 +95,50 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
       activeRecord,
       checkIn: async (payload: any) => {
         try {
+          console.log('📤 [AttendanceContext] Submitting check-in payload:', payload);
+
+          // Ensure at least one of userId or userIds is provided
+          if (!payload.userId && (!payload.userIds || payload.userIds.length === 0)) {
+            throw new Error('Either userId or userIds must be provided');
+          }
+
+          // If only single userId, convert to userIds array for consistency
+          if (payload.userId && !payload.userIds) {
+            payload.userIds = [payload.userId];
+            delete payload.userId;
+          }
+
           // Pass token explicitly to ensure active in-memory token is used
-          await apiFetch('/attendance', {
+          const response = await apiFetch<{
+            success: boolean;
+            message: string;
+            data: any;
+          }>('/attendance', {
             method: 'POST',
             body: JSON.stringify(payload),
             token,
           });
+
+          console.log('✅ [AttendanceContext] Check-in successful:', response);
+
+          // Fetch updated history
           await fetchHistory();
+
+          return {
+            success: response.success ?? true,
+            message: response.message || 'Attendance marked successfully',
+            guardCount: Array.isArray(response.data) ? response.data.length : 1,
+          };
         } catch (error) {
           // Handle 401 Unauthorized by resetting session
           if (error instanceof Error && error.message === 'Unauthorized') {
             console.log('🔐 [AttendanceContext] checkIn 401 Unauthorized - clearing records and resetting session');
             setRecords([]); // Clear stale records before logout
             await resetSession();
-            return; // Don't re-throw, let session reset handle it
+            return {
+              success: false,
+              message: 'Session expired. Please login again.',
+            };
           }
           console.error('❌ [AttendanceContext] checkIn failed:', error);
           throw error;
