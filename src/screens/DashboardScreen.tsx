@@ -464,7 +464,7 @@ export function DashboardScreen() {
               style={styles.outerRing}
             >
               <View style={styles.innerCircle}>
-                <Text style={styles.buttonText}>{loading ? '...' : 'GO'}</Text>
+                <Text style={styles.buttonText}>{loading ? '...' : 'GO '}</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
