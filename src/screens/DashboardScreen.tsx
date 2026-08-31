@@ -34,6 +34,7 @@ interface GuardOption {
   userId: string;
   userCode: string;
   name: string;
+  email: string;
   designation: string;
 }
 
@@ -77,6 +78,7 @@ export function DashboardScreen() {
 
   const [guardUserId, setGuardUserId] = useState(user?.id || '');
   const [guardName, setGuardName] = useState(user?.name || '');
+  const [guardEmail, setGuardEmail] = useState(user?.email || '');
   const [designation, setDesignation] = useState('Security Guard');
   const [hour, setHour] = useState('8');
   const [attendance, setAttendance] = useState('PRESENT');
@@ -204,6 +206,7 @@ export function DashboardScreen() {
     setUserCodeSearch(guard.userCode);
     setGuardUserId(guard.userId);
     setGuardName(guard.name);
+    setGuardEmail(guard.email);
     if (guard.designation) {
       setDesignation(guard.designation);
     }
@@ -265,6 +268,9 @@ export function DashboardScreen() {
             captureAddress = [place.name, place.street, place.subregion, place.city]
               .filter(Boolean)
               .join(', ');
+          } else {
+            // Fallback to coordinates if geocoding returns no result
+            captureAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
           }
         } catch (locErr) {
           console.warn('getCurrentPositionAsync failed, trying last known position:', locErr);
@@ -272,13 +278,16 @@ export function DashboardScreen() {
           if (lastLoc) {
             latitude = lastLoc.coords.latitude;
             longitude = lastLoc.coords.longitude;
+            captureAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+          } else {
+            // Final fallback - use default coordinates with a note
+            captureAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)} (Default)`;
           }
         }
       }
 
       await checkIn({
-        userId: guardUserId,
-        markedById: user?.id || guardUserId,
+        userEmails: [guardEmail], // Use email instead of numeric ID
         postId: selectedPost?.id || postSearch,
         date: date,
         time: time,

@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { useAttendance } from '../context/AttendanceContext';
 import { useAuth } from '../context/AuthContext';
 import { getCurrentCoordinates } from '../utils/location';
@@ -46,7 +47,7 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
   };
 
   const handleAutomaticCheckIn = async () => {
-    if (!user?.id || !selectedPostId) {
+    if (!user?.id || !user?.email || !selectedPostId) {
       Alert.alert('Error', 'Missing user session or selected post.');
       return;
     }
@@ -70,9 +71,24 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
         hour12: true,
       });
 
-      // 2. Build payload with single or multiple guard IDs
+      // 1a. Try to reverse geocode coordinates to address
+      let captureAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+      try {
+        const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+        const place = geocode[0];
+        if (place) {
+          captureAddress = [place.name, place.street, place.subregion, place.city]
+            .filter(Boolean)
+            .join(', ');
+        }
+      } catch (geoError) {
+        console.warn('Reverse geocoding failed, using coordinates:', geoError);
+      }
+
+      // 2. Build payload - send user email for backend lookup, not numeric ID
+      // Note: For now, guards can only mark for themselves, so always send their own email
       const payload = {
-        userIds: selectedGuardIds.length > 0 ? selectedGuardIds : [user.id],
+        userEmails: [user.email],
         postId: selectedPostId,
         date: dateStr,
         time: timeStr,
@@ -80,6 +96,7 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
         status: selectedStatus || 'PRESENT',
         captureLatitude: latitude,
         captureLongitude: longitude,
+        captureAddress: captureAddress,
       };
 
       console.log('📤 [CheckInScreen] Submitting payload:', payload);
@@ -87,7 +104,7 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
       // 3. Submit check-in request
       const response = await checkIn(payload);
 
-      const guardCount = response.guardCount || selectedGuardIds.length;
+      const guardCount = response.guardCount || 1;
       Alert.alert(
         'Success',
         `✅ Attendance marked for ${guardCount} guard(s)\n\nLocation: (${latitude.toFixed(

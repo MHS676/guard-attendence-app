@@ -1,6 +1,7 @@
 import { AuthSession } from '../types';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const AUTH_API_URL = process.env.EXPO_PUBLIC_AUTH_API_URL;
 
 function buildDemoSession(identifier: string): AuthSession {
   return {
@@ -43,8 +44,8 @@ export async function signInRequest(usernameOrEmail: string, password: string): 
   const cleanPassword = password.trim();
 
   // If no environment API_URL is configured, use local demo fallback
-  if (!API_URL) {
-    console.warn('⚠️ [signInRequest] API_URL is not configured, using demo fallback');
+  if (!AUTH_API_URL) {
+    console.warn('⚠️ [signInRequest] AUTH_API_URL is not configured, using demo fallback');
     await new Promise((resolve) => setTimeout(resolve, 800)); // Simulate network lag
     
     if (
@@ -65,23 +66,22 @@ export async function signInRequest(usernameOrEmail: string, password: string): 
     throw new Error('Please enter valid credentials.');
   }
 
-  console.log(`📡 [signInRequest] API_URL configured: ${API_URL}, making real login request`);
+  console.log(`📡 [signInRequest] AUTH_API_URL configured: ${AUTH_API_URL}, making real login request`);
 
   // Network request with 10s Abort Controller Timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const response = await fetch(`${API_URL}/auth/login`, {
+    const response = await fetch(`${AUTH_API_URL}/auth/login`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
       body: JSON.stringify({
-        username: cleanIdentifier,
         email: cleanIdentifier,
-        password: cleanPassword,
+        secretPass: cleanPassword,
       }),
       signal: controller.signal,
     });
@@ -103,7 +103,7 @@ export async function signInRequest(usernameOrEmail: string, password: string): 
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error(`Server connection timed out (${API_URL}). Check backend status.`);
+      throw new Error(`Server connection timed out (${AUTH_API_URL}). Check backend status.`);
     }
     throw error;
   }

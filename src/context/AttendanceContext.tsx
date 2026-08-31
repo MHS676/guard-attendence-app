@@ -9,6 +9,7 @@ type AttendanceContextValue = {
   checkIn: (payload: {
     userId?: string;
     userIds?: string[];
+    userEmails?: string[];
     postId: string;
     date: string;
     time: string;
@@ -30,21 +31,22 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
 
   const fetchHistory = useCallback(async () => {
-    // Guard clause: ensure both token and user.id exist and are non-empty strings
+    // Guard clause: ensure both token and user exist
     if (!token || typeof token !== 'string' || token.trim().length === 0) {
       console.log('⚠️ [AttendanceContext] Token is missing or invalid - skipping history fetch');
       return;
     }
 
-    if (!user?.id || typeof user.id !== 'string' || user.id.trim().length === 0) {
-      console.log('⚠️ [AttendanceContext] User ID is missing or invalid - skipping history fetch');
+    if (!user?.email || typeof user.email !== 'string' || user.email.trim().length === 0) {
+      console.log('⚠️ [AttendanceContext] User email is missing or invalid - skipping history fetch');
       return;
     }
 
     try {
-      console.log(`📡 [AttendanceContext] Requesting history for user ID: ${user.id}`);
+      console.log(`📡 [AttendanceContext] Requesting history for user email: ${user.email}`);
       // Pass token explicitly to ensure active in-memory token is used
-      const data = await apiFetch<any[]>(`/attendance/user/${user.id}`, { token });
+      // Use email instead of numeric ID for backend lookup
+      const data = await apiFetch<any[]>(`/attendance/user/${user.email}`, { token });
       console.log(`✅ [AttendanceContext] Received ${data?.length || 0} attendance records.`);
 
       if (!Array.isArray(data)) {
@@ -79,7 +81,7 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
       }
       console.error('❌ [AttendanceContext] Failed to fetch history:', error);
     }
-  }, [user?.id, token, resetSession]);
+  }, [user?.email, token, resetSession]);
 
   useEffect(() => {
     if (user?.id && token) {
@@ -97,13 +99,13 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
         try {
           console.log('📤 [AttendanceContext] Submitting check-in payload:', payload);
 
-          // Ensure at least one of userId or userIds is provided
-          if (!payload.userId && (!payload.userIds || payload.userIds.length === 0)) {
-            throw new Error('Either userId or userIds must be provided');
+          // Ensure at least one of userId, userIds, or userEmails is provided
+          if (!payload.userId && (!payload.userIds || payload.userIds.length === 0) && (!payload.userEmails || payload.userEmails.length === 0)) {
+            throw new Error('Either userId, userIds, or userEmails must be provided');
           }
 
           // If only single userId, convert to userIds array for consistency
-          if (payload.userId && !payload.userIds) {
+          if (payload.userId && !payload.userIds && !payload.userEmails) {
             payload.userIds = [payload.userId];
             delete payload.userId;
           }
