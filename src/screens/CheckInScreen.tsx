@@ -9,6 +9,7 @@ import {
   CheckBox,
   StyleSheet,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useAttendance } from '../context/AttendanceContext';
@@ -21,6 +22,10 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
   const [loading, setLoading] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>('PRESENT');
   const [selectedGuardIds, setSelectedGuardIds] = useState<string[]>(user?.id ? [user.id] : []);
+  const [postName, setPostName] = useState<string>('');
+  const [postCode, setPostCode] = useState<string>('');
+  const [guardCode, setGuardCode] = useState<string>(user?.id || '');
+  const [shiftHours, setShiftHours] = useState<string>('8');
 
   // Determine if this user can mark for multiple guards
   const canMarkMultiple = useMemo(() => {
@@ -90,9 +95,12 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
       const payload = {
         userEmails: [user.email],
         postId: selectedPostId,
+        postName: postName,
+        postCode: postCode,
+        guardCode: guardCode,
         date: dateStr,
         time: timeStr,
-        shiftHours: 8,
+        shiftHours: parseInt(shiftHours, 10) || 8,
         status: selectedStatus || 'PRESENT',
         captureLatitude: latitude,
         captureLongitude: longitude,
@@ -131,6 +139,53 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
     <ScrollView style={styles.container}>
       <View style={styles.section}>
         <Text style={styles.title}>Mark Attendance</Text>
+
+        {/* Input Section - Post Name/Code */}
+        <View style={styles.inputSection}>
+          <Text style={styles.label}>Post Name:</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter post name"
+            value={postName}
+            onChangeText={setPostName}
+            placeholderTextColor="#999"
+          />
+
+          <Text style={styles.label}>Post Code:</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter post code"
+            value={postCode}
+            onChangeText={setPostCode}
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        {/* Input Section - Guard Code */}
+        <View style={styles.inputSection}>
+          <Text style={styles.label}>Guard User Code:</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Guard code"
+            value={guardCode}
+            onChangeText={setGuardCode}
+            editable={false}
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        {/* Input Section - Shift Hours */}
+        <View style={styles.inputSection}>
+          <Text style={styles.label}>Shift Hours:</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter shift hours"
+            value={shiftHours}
+            onChangeText={setShiftHours}
+            keyboardType="numeric"
+            placeholderTextColor="#999"
+          />
+        </View>
 
         {/* Status Selection */}
         <View style={styles.statusContainer}>
@@ -208,8 +263,26 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 10,
+    marginBottom: 8,
     color: '#555',
+  },
+  inputSection: {
+    marginBottom: 20,
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: '#fafafa',
   },
   statusContainer: {
     marginBottom: 20,
