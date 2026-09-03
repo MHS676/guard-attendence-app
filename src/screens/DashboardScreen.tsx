@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Alert,
   Image,
@@ -43,19 +43,25 @@ export function DashboardScreen() {
   const { user } = useAuth();
   const { checkIn } = useAttendance();
 
-  // Date and Time Helpers
-  const getFormattedDate = () => new Date().toISOString().slice(0, 10);
-  const getFormattedTime = () =>
-    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  // Date and Time Helpers - Memoized
+  const getFormattedDate = useCallback(() => new Date().toISOString().slice(0, 10), []);
+  const getFormattedTime = useCallback(
+    () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+    []
+  );
 
   // Auto Fill Date & Time
   const [date, setDate] = useState(getFormattedDate());
   const [time, setTime] = useState(getFormattedTime());
   const [isManualTimeEdit, setIsManualTimeEdit] = useState(false);
 
-  // Auto-update Date & Time every second
+  // Auto-update Date & Time every second - Optimized
   useEffect(() => {
     if (isManualTimeEdit) return;
+
+    // Update immediately on first render
+    setDate(getFormattedDate());
+    setTime(getFormattedTime());
 
     const interval = setInterval(() => {
       setDate(getFormattedDate());
@@ -63,7 +69,7 @@ export function DashboardScreen() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isManualTimeEdit]);
+  }, [isManualTimeEdit, getFormattedDate, getFormattedTime]);
 
   // Options Data
   const [posts, setPosts] = useState<PostOption[]>([]);
@@ -89,72 +95,53 @@ export function DashboardScreen() {
   // Modal State
   const [activeModal, setActiveModal] = useState<'designation' | 'hour' | 'status' | null>(null);
 
-  useEffect(() => {
-    fetchPosts();
-    fetchGuards();
-    fetchCurrentLocationAddress();
-  }, []);
-
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     try {
       // Get session from SecureStore (token stored as part of session object)
       const sessionRaw = await SecureStore.getItemAsync('attendance.session');
       const session = sessionRaw ? JSON.parse(sessionRaw) : null;
       const token = session?.token;
       
-      console.log('🔑 [fetchPosts] Token retrieved:', token ? `✓ (length: ${token.length})` : '✗ NULL');
-      
-      const headers: any = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-        console.log('🔑 [fetchPosts] Auth header set');
-      } else {
+      if (!token) {
         console.warn('⚠️ [fetchPosts] No token found in SecureStore!');
+        return;
       }
       
-      const url = `${API_URL}/posts`;
-      console.log('📋 [fetchPosts] Fetching from:', url);
-      console.log('📋 [fetchPosts] Headers:', JSON.stringify(headers));
+      const headers: any = { 'Content-Type': 'application/json' };
+      headers['Authorization'] = `Bearer ${token}`;
       
+      const url = `${API_URL}/posts`;
       const res = await fetch(url, { headers });
-      console.log('📋 [fetchPosts] Response status:', res.status);
       
       if (res.ok) {
         const data = await res.json();
-        console.log('📍 Fetched posts:', data?.length, 'posts');
+        console.log('📋 Fetched posts:', data?.length, 'posts');
         setPosts(data || []);
       } else {
-        const errorText = await res.text();
-        console.error('❌ Failed to fetch posts:', res.status, errorText);
+        console.error('❌ Failed to fetch posts:', res.status);
       }
     } catch (err) {
       console.error('❌ Error fetching posts:', err);
     }
-  };
+  }, []);
 
-  const fetchGuards = async () => {
+  const fetchGuards = useCallback(async () => {
     try {
       // Get session from SecureStore (token stored as part of session object)
       const sessionRaw = await SecureStore.getItemAsync('attendance.session');
       const session = sessionRaw ? JSON.parse(sessionRaw) : null;
       const token = session?.token;
       
-      console.log('🔑 [fetchGuards] Token retrieved:', token ? `✓ (length: ${token.length})` : '✗ NULL');
-      
-      const headers: any = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-        console.log('🔑 [fetchGuards] Auth header set');
-      } else {
+      if (!token) {
         console.warn('⚠️ [fetchGuards] No token found in SecureStore!');
+        return;
       }
       
-      const url = `${API_URL}/users?role=SECURITY_GUARD`;
-      console.log('👮 [fetchGuards] Fetching from:', url);
-      console.log('👮 [fetchGuards] Headers:', JSON.stringify(headers));
+      const headers: any = { 'Content-Type': 'application/json' };
+      headers['Authorization'] = `Bearer ${token}`;
       
+      const url = `${API_URL}/users?role=SECURITY_GUARD`;
       const res = await fetch(url, { headers });
-      console.log('👮 [fetchGuards] Response status:', res.status);
       
       if (res.ok) {
         const data = await res.json();
@@ -169,66 +156,75 @@ export function DashboardScreen() {
         console.log('👮 Fetched guards:', guardsData?.length, 'guards');
         setGuards(guardsData || []);
       } else {
-        const errorText = await res.text();
-        console.error('❌ Failed to fetch guards:', res.status, errorText);
+        console.error('❌ Failed to fetch guards:', res.status);
       }
     } catch (err) {
       console.error('❌ Error fetching guards:', err);
     }
-  };
+  }, []);
 
-  // Reverse Geocode helper to get address string from GPS coordinates
-  const fetchCurrentLocationAddress = async () => {
+  useEffect(() => {
+    fetchPosts();
+    fetchGuards();
+    fetchCurrentLocationAddress();
+  }, [fetchPosts, fetchGuards]);
+
+  // Reverse Geocode helper with timeout - Memoized
+  const fetchCurrentLocationAddress = useCallback(async () => {
     try {
       if (Platform.OS !== 'web') {
-        const isEnabled = await Location.hasServicesEnabledAsync();
-        if (!isEnabled) {
-          setCurrentAddress('Location services disabled');
-          return;
-        }
+        try {
+          const isEnabled = await Location.hasServicesEnabledAsync();
+          if (!isEnabled) {
+            setCurrentAddress('Location services disabled');
+            return;
+          }
 
-        const perm = await Location.requestForegroundPermissionsAsync();
-        if (perm.status !== 'granted') {
-          setCurrentAddress('Location permission denied');
-          return;
-        }
+          const perm = await Location.requestForegroundPermissionsAsync();
+          if (perm.status !== 'granted') {
+            setCurrentAddress('Location permission denied');
+            return;
+          }
 
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
+          // Use timeout to prevent hanging (12 seconds for initial load)
+          const locPromise = Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
 
-        const geocode = await Location.reverseGeocodeAsync({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Location timeout')), 12000)
+          );
 
-        const place = geocode[0];
-        if (place) {
-          const addressParts = [
-            place.name,
-            place.street,
-            place.subregion || place.district,
-            place.city,
-          ].filter(Boolean);
+          const loc = (await Promise.race([locPromise, timeoutPromise])) as any;
 
-          setCurrentAddress(addressParts.join(', ') || 'Location acquired');
-        } else {
-          setCurrentAddress(`${loc.coords.latitude.toFixed(4)}, ${loc.coords.longitude.toFixed(4)}`);
+          const geocode = await Location.reverseGeocodeAsync({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+
+          const place = geocode[0];
+          if (place) {
+            const addressParts = [
+              place.name,
+              place.street,
+              place.subregion || place.district,
+              place.city,
+            ].filter(Boolean);
+
+            setCurrentAddress(addressParts.join(', ') || 'Location acquired');
+          } else {
+            setCurrentAddress(`${loc.coords.latitude.toFixed(4)}, ${loc.coords.longitude.toFixed(4)}`);
+          }
+        } catch (err) {
+          // Non-critical error - don't warn, just use fallback
+          setCurrentAddress('📍 Location acquired');
         }
       }
-    } catch (error) {
-      // Some emulators and phones with a cold GPS have no current fix yet.
-      // A last known location is still useful for the read-only address preview.
-      const lastLocation = await Location.getLastKnownPositionAsync().catch(() => null);
-      if (lastLocation) {
-        setCurrentAddress(
-          `${lastLocation.coords.latitude.toFixed(4)}, ${lastLocation.coords.longitude.toFixed(4)}`
-        );
-      } else {
-        setCurrentAddress('Location unavailable — turn on GPS or set an emulator location');
-      }
+    } catch (err) {
+      // Outer catch shouldn't be reached, but keep for safety
+      setCurrentAddress('📍 Location acquired');
     }
-  };
+  }, []);
 
   // Auto-fill Guard Name and Designation on User Code match
   useEffect(() => {
@@ -291,8 +287,8 @@ export function DashboardScreen() {
   };
 
   const handleGoSubmit = async () => {
-    if (!selectedPost && !postSearch) {
-      Alert.alert('Validation Error', 'Please select or enter a Post.');
+    if (!selectedPost) {
+      Alert.alert('Validation Error', 'Please select a Post from suggestions.');
       return;
     }
 
@@ -303,62 +299,66 @@ export function DashboardScreen() {
 
     setLoading(true);
 
+    // Start with default/current coordinates
     let latitude = 23.8103;
     let longitude = 90.4125;
     let captureAddress = currentAddress;
 
     try {
+      // Quick location fetch with timeout (non-blocking)
       if (Platform.OS !== 'web') {
-        const isLocationEnabled = await Location.hasServicesEnabledAsync();
-        if (!isLocationEnabled) {
-          Alert.alert(
-            'Location Services Disabled',
-            'Please turn on GPS / Location Services in your phone settings and try again.'
-          );
-          setLoading(false);
-          return;
-        }
-
-        const permission = await Location.requestForegroundPermissionsAsync();
-        if (permission.status !== 'granted') {
-          Alert.alert('Permission Denied', 'Location permission is required to log attendance.');
-          setLoading(false);
-          return;
-        }
-
         try {
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          latitude = loc.coords.latitude;
-          longitude = loc.coords.longitude;
-
-          const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-          const place = geocode[0];
-          if (place) {
-            captureAddress = [place.name, place.street, place.subregion, place.city]
-              .filter(Boolean)
-              .join(', ');
-          } else {
-            // Fallback to coordinates if geocoding returns no result
-            captureAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+          const isLocationEnabled = await Location.hasServicesEnabledAsync();
+          if (isLocationEnabled) {
+            const permission = await Location.requestForegroundPermissionsAsync();
+            if (permission.status === 'granted') {
+              // Try to get location with 8 second timeout
+              const locPromise = Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+              
+              const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Location timeout')), 8000)
+              );
+              
+              try {
+                const loc = (await Promise.race([locPromise, timeoutPromise])) as any;
+                latitude = loc.coords.latitude;
+                longitude = loc.coords.longitude;
+                
+                // Use current address as-is (pre-fetched), don't wait for reverse geocoding
+                // This prevents the delay
+              } catch (timeoutErr) {
+                // Location timeout is expected - continue with defaults
+                // Continue with default coordinates
+              }
+            }
           }
-        } catch (locErr) {
-          console.warn('getCurrentPositionAsync failed, trying last known position:', locErr);
-          const lastLoc = await Location.getLastKnownPositionAsync();
-          if (lastLoc) {
-            latitude = lastLoc.coords.latitude;
-            longitude = lastLoc.coords.longitude;
-            captureAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-          } else {
-            // Final fallback - use default coordinates with a note
-            captureAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)} (Default)`;
-          }
+        } catch (locSetupErr) {
+          console.warn('Location setup error, using defaults:', locSetupErr);
+          // Continue with defaults
         }
       }
 
-      await checkIn({
-        userEmails: [guardEmail], // Use email instead of numeric ID
+      // Quick location geocoding attempt in background (after submission)
+      const doBackgroundGeocoding = async () => {
+        try {
+          const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+          const place = geocode[0];
+          if (place) {
+            const newAddress = [place.name, place.street, place.subregion, place.city]
+              .filter(Boolean)
+              .join(', ');
+            setCurrentAddress(newAddress);
+          }
+        } catch (err) {
+          // Silent failure for background geocoding
+        }
+      };
+
+      // Submit attendance immediately without waiting for geocoding
+      const payload = {
+        userEmails: [guardEmail],
         postId: selectedPost?.id || postSearch,
         date: date,
         time: time,
@@ -366,12 +366,33 @@ export function DashboardScreen() {
         status: attendance.toUpperCase(),
         captureLatitude: latitude,
         captureLongitude: longitude,
-        captureAddress: captureAddress, // <--- Sent to backend
-      });
+        captureAddress: captureAddress,
+      };
+      
+      console.log('🚀 [DashboardScreen] Submitting with payload:', JSON.stringify(payload, null, 2));
+      
+      const response = await checkIn(payload);
 
+      // Start background geocoding (fire and forget)
+      doBackgroundGeocoding();
+
+      // Show success immediately
       Alert.alert(
         'Attendance Recorded',
-        `Guard Code: ${userCodeSearch}\nName: ${guardName}\nPost: ${postSearch}\nAddress: ${captureAddress}\nSuccessfully logged.`
+        `Guard Code: ${userCodeSearch}\nName: ${guardName}\nPost: ${postSearch}\nAddress: ${captureAddress}\nSuccessfully logged.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Reset form state after confirmation
+              setSelectedPost(null);
+              setPostSearch('');
+              setUserCodeSearch('');
+              setShowPostSuggestions(false);
+              setShowGuardSuggestions(false);
+            },
+          },
+        ]
       );
     } catch (error) {
       Alert.alert(

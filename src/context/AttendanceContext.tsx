@@ -34,12 +34,12 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
     // Guard clause: ensure both token and user exist
     if (!token || typeof token !== 'string' || token.trim().length === 0) {
       console.log('⚠️ [AttendanceContext] Token is missing or invalid - skipping history fetch');
-      return;
+      return [];
     }
 
     if (!user?.email || typeof user.email !== 'string' || user.email.trim().length === 0) {
       console.log('⚠️ [AttendanceContext] User email is missing or invalid - skipping history fetch');
-      return;
+      return [];
     }
 
     try {
@@ -48,38 +48,45 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
       // Use email instead of numeric ID for backend lookup
       const data = await apiFetch<any[]>(`/attendance/user/${user.email}`, { token });
       console.log(`✅ [AttendanceContext] Received ${data?.length || 0} attendance records.`);
+      console.log(`📋 [AttendanceContext] Raw records:`, JSON.stringify(data?.slice(0, 2) || [], null, 2));
 
       if (!Array.isArray(data)) {
-        console.error('❌ [AttendanceContext] Expected array from backend, got:', data);
+        console.error('❌ [AttendanceContext] Expected array from backend, got:', typeof data, data);
         setRecords([]);
-        return;
+        return [];
       }
 
-      const mappedRecords: AttendanceRecord[] = data.map((item) => ({
-        id: item.id,
-        date: item.date ? new Date(item.date).toISOString().slice(0, 10) : today(),
-        checkIn: item.checkInTime || item.time || item.createdAt || '08:00 AM',
-        status: item.status || 'PRESENT',
-        location: {
-          latitude: item.captureLatitude ?? 0,
-          longitude: item.captureLongitude ?? 0,
-          accuracy: item.accuracy ?? null,
-        },
-        guardName: item.user?.name,
-        guardId: item.userId,
-        markedBy: item.markedBy?.name,
-      }));
+      const mappedRecords: AttendanceRecord[] = data.map((item) => {
+        console.log(`📍 [AttendanceContext] Mapping record:`, item.id, 'date:', item.date);
+        return {
+          id: item.id,
+          date: item.date ? new Date(item.date).toISOString().slice(0, 10) : today(),
+          checkIn: item.checkInTime || item.time || item.createdAt || '08:00 AM',
+          status: item.status || 'PRESENT',
+          location: {
+            latitude: item.captureLatitude ?? 0,
+            longitude: item.captureLongitude ?? 0,
+            accuracy: item.accuracy ?? null,
+          },
+          guardName: item.user?.name,
+          guardId: item.userId,
+          markedBy: item.markedBy?.name,
+        };
+      });
 
+      console.log(`✅ [AttendanceContext] Mapped ${mappedRecords.length} records`);
       setRecords(mappedRecords);
+      return mappedRecords;
     } catch (error) {
       // Handle 401 Unauthorized by resetting session
       if (error instanceof Error && error.message === 'Unauthorized') {
         console.log('🔐 [AttendanceContext] 401 Unauthorized - clearing records and resetting session');
         setRecords([]); // Clear stale records before logout
         await resetSession();
-        return;
+        return [];
       }
       console.error('❌ [AttendanceContext] Failed to fetch history:', error);
+      return [];
     }
   }, [user?.email, token, resetSession]);
 
@@ -123,8 +130,13 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
 
           console.log('✅ [AttendanceContext] Check-in successful:', response);
 
-          // Fetch updated history
-          await fetchHistory();
+          // Fetch updated history in background (don't wait, fire-and-forget)
+          // Add small delay to ensure DB writes are complete
+          setTimeout(() => {
+            fetchHistory().catch((err) => {
+              console.warn('⚠️ [AttendanceContext] Background fetchHistory failed:', err);
+            });
+          }, 500); // 500ms delay to allow DB write to complete
 
           return {
             success: response.success ?? true,

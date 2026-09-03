@@ -26,20 +26,24 @@ export function HistoryScreen() {
 
   const filtered = useMemo(() => {
     const now = new Date();
-    return records.filter((r) => {
+    const filtered = records.filter((r) => {
       const date = new Date(`${r.date}T12:00:00`);
       return filter === 'month'
         ? date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
         : true;
     });
+    console.log(`📊 [HistoryScreen] Total records: ${records.length}, Filtered: ${filtered.length}, Filter: ${filter}`);
+    return filtered;
   }, [filter, records]);
 
   const onRefresh = async () => {
     setRefreshing(true);
+    console.log('🔄 [HistoryScreen] Manually refreshing attendance records...');
     try {
-      await fetchHistory();
+      const result = await fetchHistory();
+      console.log('✅ [HistoryScreen] Refresh complete. Records:', result);
     } catch (error) {
-      console.error('Error refreshing:', error);
+      console.error('❌ [HistoryScreen] Error refreshing:', error);
     } finally {
       setRefreshing(false);
     }
@@ -77,9 +81,17 @@ export function HistoryScreen() {
         contentContainerStyle={filtered.length ? styles.list : styles.empty}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
-          <Text variant="bodyLarge" style={styles.muted}>
-            No attendance records for this period.
-          </Text>
+          <View style={styles.emptyContainer}>
+            <Text variant="bodyLarge" style={styles.muted}>
+              No attendance records for this period.
+            </Text>
+            <Text variant="bodySmall" style={styles.debugInfo}>
+              Total records in database: {records.length}
+            </Text>
+            <Text variant="bodySmall" style={styles.debugInfo}>
+              Current filter: {filter === 'month' ? 'This Month' : 'All Time'}
+            </Text>
+          </View>
         }
         renderItem={({ item }) => (
           <Card style={styles.card}>
@@ -139,6 +151,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  emptyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
   card: {
     backgroundColor: 'white',
     borderRadius: 8,
@@ -183,6 +201,11 @@ const styles = StyleSheet.create({
   muted: {
     color: '#65708A',
     textAlign: 'center',
+  },
+  debugInfo: {
+    color: '#999',
+    textAlign: 'center',
+    fontSize: 12,
   },
 });
 
