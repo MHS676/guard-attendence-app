@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { useAttendance } from '../context/AttendanceContext';
@@ -96,25 +97,83 @@ export function DashboardScreen() {
 
   const fetchPosts = async () => {
     try {
-      const res = await fetch(`${API_URL}/posts`);
+      // Get session from SecureStore (token stored as part of session object)
+      const sessionRaw = await SecureStore.getItemAsync('attendance.session');
+      const session = sessionRaw ? JSON.parse(sessionRaw) : null;
+      const token = session?.token;
+      
+      console.log('🔑 [fetchPosts] Token retrieved:', token ? `✓ (length: ${token.length})` : '✗ NULL');
+      
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('🔑 [fetchPosts] Auth header set');
+      } else {
+        console.warn('⚠️ [fetchPosts] No token found in SecureStore!');
+      }
+      
+      const url = `${API_URL}/posts`;
+      console.log('📋 [fetchPosts] Fetching from:', url);
+      console.log('📋 [fetchPosts] Headers:', JSON.stringify(headers));
+      
+      const res = await fetch(url, { headers });
+      console.log('📋 [fetchPosts] Response status:', res.status);
+      
       if (res.ok) {
         const data = await res.json();
-        setPosts(data);
+        console.log('📍 Fetched posts:', data?.length, 'posts');
+        setPosts(data || []);
+      } else {
+        const errorText = await res.text();
+        console.error('❌ Failed to fetch posts:', res.status, errorText);
       }
     } catch (err) {
-      console.log('Error fetching posts:', err);
+      console.error('❌ Error fetching posts:', err);
     }
   };
 
   const fetchGuards = async () => {
     try {
-      const res = await fetch(`${API_URL}/guards`);
+      // Get session from SecureStore (token stored as part of session object)
+      const sessionRaw = await SecureStore.getItemAsync('attendance.session');
+      const session = sessionRaw ? JSON.parse(sessionRaw) : null;
+      const token = session?.token;
+      
+      console.log('🔑 [fetchGuards] Token retrieved:', token ? `✓ (length: ${token.length})` : '✗ NULL');
+      
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('🔑 [fetchGuards] Auth header set');
+      } else {
+        console.warn('⚠️ [fetchGuards] No token found in SecureStore!');
+      }
+      
+      const url = `${API_URL}/users?role=SECURITY_GUARD`;
+      console.log('👮 [fetchGuards] Fetching from:', url);
+      console.log('👮 [fetchGuards] Headers:', JSON.stringify(headers));
+      
+      const res = await fetch(url, { headers });
+      console.log('👮 [fetchGuards] Response status:', res.status);
+      
       if (res.ok) {
         const data = await res.json();
-        setGuards(data);
+        // Transform users to guard format
+        const guardsData = (data || []).map((user: any) => ({
+          userId: user.id,
+          userCode: user.employeeId || user.id,
+          name: user.name,
+          email: user.email,
+          designation: user.designation || 'Security Guard',
+        }));
+        console.log('👮 Fetched guards:', guardsData?.length, 'guards');
+        setGuards(guardsData || []);
+      } else {
+        const errorText = await res.text();
+        console.error('❌ Failed to fetch guards:', res.status, errorText);
       }
     } catch (err) {
-      console.log('Error fetching guards:', err);
+      console.error('❌ Error fetching guards:', err);
     }
   };
 
@@ -195,15 +254,27 @@ export function DashboardScreen() {
       p.name.toLowerCase().includes(postSearch.toLowerCase()) ||
       p.code.toLowerCase().includes(postSearch.toLowerCase())
   );
+  
+  if (postSearch && filteredPosts.length > 0) {
+    console.log('✅ Filtered posts:', filteredPosts.length, 'for search:', postSearch);
+  }
 
   const filteredGuards = guards.filter(
-    (g) =>
-      g.userCode.toLowerCase().includes(userCodeSearch.toLowerCase()) ||
-      g.name.toLowerCase().includes(userCodeSearch.toLowerCase())
+    (g) => {
+      const searchText = userCodeSearch.toLowerCase();
+      return (
+        g.userCode.toLowerCase().includes(searchText) ||
+        g.name.toLowerCase().includes(searchText)
+      );
+    }
   );
+  
+  if (userCodeSearch && filteredGuards.length > 0) {
+    console.log('✅ Filtered guards:', filteredGuards.length, 'for search:', userCodeSearch);
+  }
 
   const handleSelectGuard = (guard: GuardOption) => {
-    setUserCodeSearch(guard.userCode);
+    setUserCodeSearch(`${guard.name} (${guard.userCode})`);
     setGuardUserId(guard.userId);
     setGuardName(guard.name);
     setGuardEmail(guard.email);
@@ -215,7 +286,7 @@ export function DashboardScreen() {
 
   const handleSelectPost = (p: PostOption) => {
     setSelectedPost(p);
-    setPostSearch(p.name);
+    setPostSearch(`${p.name} (${p.code})`);
     setShowPostSuggestions(false);
   };
 
@@ -325,34 +396,6 @@ export function DashboardScreen() {
           </View>
 
           <View style={styles.formCard}>
-            {/* Auto Date & Time */}
-            <View style={styles.row}>
-              <View style={styles.halfInput}>
-                <TextInput
-                  value={date}
-                  onChangeText={(val) => {
-                    setIsManualTimeEdit(true);
-                    setDate(val);
-                  }}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#8E8E8E"
-                  style={styles.input}
-                />
-              </View>
-              <View style={styles.halfInput}>
-                <TextInput
-                  value={time}
-                  onChangeText={(val) => {
-                    setIsManualTimeEdit(true);
-                    setTime(val);
-                  }}
-                  placeholder="HH:MM"
-                  placeholderTextColor="#8E8E8E"
-                  style={styles.input}
-                />
-              </View>
-            </View>
-
             {/* Post Auto-suggestion */}
             <View style={styles.suggestionWrapper}>
               <View style={styles.fullInput}>
@@ -363,7 +406,7 @@ export function DashboardScreen() {
                     setShowPostSuggestions(true);
                   }}
                   onFocus={() => setShowPostSuggestions(true)}
-                  placeholder="Post Name / Code"
+                  placeholder="Search Post by Name or Code"
                   placeholderTextColor="#8E8E8E"
                   style={styles.input}
                 />
@@ -382,28 +425,6 @@ export function DashboardScreen() {
               )}
             </View>
 
-            {/* Location Address Display Field */}
-            <View style={styles.fullInput}>
-              <TextInput
-                value={currentAddress}
-                onChangeText={setCurrentAddress}
-                placeholder="Captured Location Address"
-                placeholderTextColor="#8E8E8E"
-                style={styles.input}
-              />
-              <TouchableOpacity onPress={fetchCurrentLocationAddress}>
-                <Text style={styles.locationIcon}>📍</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Designation Dropdown Modal */}
-            <TouchableOpacity style={styles.fullInput} onPress={() => setActiveModal('designation')}>
-              <Text style={[styles.inputText, !designation && styles.placeholderText]}>
-                {designation || 'Select Designation'}
-              </Text>
-              <Text style={styles.arrow}>▾</Text>
-            </TouchableOpacity>
-
             {/* Guard User Code Input */}
             <View style={styles.suggestionWrapper}>
               <View style={styles.fullInput}>
@@ -414,7 +435,7 @@ export function DashboardScreen() {
                     setShowGuardSuggestions(true);
                   }}
                   onFocus={() => setShowGuardSuggestions(true)}
-                  placeholder="Guard User Code (e.g. BO6501)"
+                  placeholder="Search by Guard Code or Name"
                   placeholderTextColor="#8E8E8E"
                   style={styles.input}
                 />
@@ -435,17 +456,6 @@ export function DashboardScreen() {
                   ))}
                 </View>
               )}
-            </View>
-
-            {/* Guard Name Input (Auto-filled) */}
-            <View style={styles.fullInput}>
-              <TextInput
-                value={guardName}
-                onChangeText={setGuardName}
-                placeholder="Guard Name"
-                placeholderTextColor="#8E8E8E"
-                style={styles.input}
-              />
             </View>
 
             {/* Shift Hours & Attendance Status Dropdowns */}
@@ -539,7 +549,7 @@ const styles = StyleSheet.create({
   logo: { width: 120, height: 120, marginBottom: 6 },
   formCard: { gap: 12 },
   row: { flexDirection: 'row', gap: 12 },
-  suggestionWrapper: { zIndex: 10 },
+  suggestionWrapper: { zIndex: 1000, position: 'relative' },
   suggestionBox: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -551,6 +561,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
+    maxHeight: 200,
   },
   suggestionItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   suggestionText: { fontSize: 14, color: '#222222' },

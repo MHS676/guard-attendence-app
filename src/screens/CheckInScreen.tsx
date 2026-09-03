@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Button,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Dimensions,
   TextInput,
+  Picker,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useAttendance } from '../context/AttendanceContext';
@@ -22,10 +23,32 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
   const [loading, setLoading] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>('PRESENT');
   const [selectedGuardIds, setSelectedGuardIds] = useState<string[]>(user?.id ? [user.id] : []);
+  const [date, setDate] = useState<string>('');
+  const [time, setTime] = useState<string>('');
   const [postName, setPostName] = useState<string>('');
   const [postCode, setPostCode] = useState<string>('');
   const [guardCode, setGuardCode] = useState<string>(user?.id || '');
   const [shiftHours, setShiftHours] = useState<string>('8');
+
+  // Auto-populate date and time on component mount
+  useEffect(() => {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    setDate(dateStr);
+    setTime(timeStr);
+  }, []);
+
+  // Auto-populate guard code when user changes
+  useEffect(() => {
+    if (user?.id) {
+      setGuardCode(user.id);
+    }
+  }, [user?.id]);
 
   // Determine if this user can mark for multiple guards
   const canMarkMultiple = useMemo(() => {
@@ -68,14 +91,6 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
       // 1. Get GPS coordinates automatically
       const { latitude, longitude } = await getCurrentCoordinates();
 
-      const now = new Date();
-      const dateStr = now.toISOString().slice(0, 10);
-      const timeStr = now.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-
       // 1a. Try to reverse geocode coordinates to address
       let captureAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
       try {
@@ -98,8 +113,8 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
         postName: postName,
         postCode: postCode,
         guardCode: guardCode,
-        date: dateStr,
-        time: timeStr,
+        date: date,
+        time: time,
         shiftHours: parseInt(shiftHours, 10) || 8,
         status: selectedStatus || 'PRESENT',
         captureLatitude: latitude,
@@ -112,12 +127,9 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
       // 3. Submit check-in request
       const response = await checkIn(payload);
 
-      const guardCount = response.guardCount || 1;
       Alert.alert(
         'Success',
-        `✅ Attendance marked for ${guardCount} guard(s)\n\nLocation: (${latitude.toFixed(
-          4,
-        )}, ${longitude.toFixed(4)})\nTime: ${timeStr}`,
+        `✅ Attendance marked successfully!`,
       );
 
       // Reset selection after success
@@ -140,40 +152,6 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
       <View style={styles.section}>
         <Text style={styles.title}>Mark Attendance</Text>
 
-        {/* Input Section - Post Name/Code */}
-        <View style={styles.inputSection}>
-          <Text style={styles.label}>Post Name:</Text>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Enter post name"
-            value={postName}
-            onChangeText={setPostName}
-            placeholderTextColor="#999"
-          />
-
-          <Text style={styles.label}>Post Code:</Text>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Enter post code"
-            value={postCode}
-            onChangeText={setPostCode}
-            placeholderTextColor="#999"
-          />
-        </View>
-
-        {/* Input Section - Guard Code */}
-        <View style={styles.inputSection}>
-          <Text style={styles.label}>Guard User Code:</Text>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Guard code"
-            value={guardCode}
-            onChangeText={setGuardCode}
-            editable={false}
-            placeholderTextColor="#999"
-          />
-        </View>
-
         {/* Input Section - Shift Hours */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>Shift Hours:</Text>
@@ -187,60 +165,20 @@ export function CheckInScreen({ selectedPostId }: { selectedPostId: string }) {
           />
         </View>
 
-        {/* Status Selection */}
-        <View style={styles.statusContainer}>
-          <Text style={styles.label}>Attendance Status:</Text>
-          {['PRESENT', 'LATE', 'ABSENT', 'LEAVE'].map((status) => (
-            <View key={status} style={styles.statusOption}>
-              <CheckBox
-                value={selectedStatus === status}
-                onValueChange={() => setSelectedStatus(status)}
-              />
-              <Text style={styles.statusText}>{status}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Multi-Guard Selection (if supervisor/coordinator) */}
-        {canMarkMultiple && (
-          <View style={styles.guardSelectionContainer}>
-            <Text style={styles.label}>Select Guards:</Text>
-            <Text style={styles.hint}>
-              {selectedGuardIds.length} guard(s) selected
-            </Text>
-            {/* In a real app, fetch guards assigned to this post */}
-            <View style={styles.guardCheckbox}>
-              <CheckBox
-                value={selectedGuardIds.includes(user?.id || '')}
-                onValueChange={() => handleGuardSelection(user?.id || '')}
-              />
-              <Text style={styles.guardName}>{user?.name} (You)</Text>
-            </View>
-          </View>
-        )}
-
         {/* Check-In Button */}
         <View style={styles.buttonContainer}>
           {loading ? (
             <ActivityIndicator size="large" color="#0000ff" />
           ) : (
             <Button
-              title={
-                canMarkMultiple
-                  ? `Mark Attendance (${selectedGuardIds.length})`
-                  : 'Mark Attendance'
-              }
+              title="Mark Attendance"
               onPress={handleAutomaticCheckIn}
               disabled={selectedGuardIds.length === 0}
             />
           )}
         </View>
 
-        {/* Info Display */}
-        <View style={styles.infoBox}>
-          <Text style={styles.infoLabel}>Role: {user?.role}</Text>
-          <Text style={styles.infoLabel}>Can mark for multiple: {canMarkMultiple ? 'Yes' : 'No'}</Text>
-        </View>
+
       </View>
     </ScrollView>
   );
@@ -283,6 +221,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     backgroundColor: '#fafafa',
+  },
+  readOnlyInput: {
+    backgroundColor: '#f0f0f0',
+    color: '#666',
+  },
+  readOnlyValue: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
   statusContainer: {
     marginBottom: 20,
