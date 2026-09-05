@@ -19,7 +19,7 @@ type AttendanceContextValue = {
     captureLongitude?: number;
     captureAddress?: string;
   }) => Promise<{ success: boolean; message: string; guardCount?: number }>;
-  fetchHistory: () => Promise<void>;
+  fetchHistory: (identifier?: string) => Promise<any[]>;
 };
 
 const AttendanceContext = createContext<AttendanceContextValue | null>(null);
@@ -30,23 +30,25 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
   const { user, token, resetSession } = useAuth();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
 
-  const fetchHistory = useCallback(async () => {
+  const fetchHistory = useCallback(async (identifierOverride?: string) => {
     // Guard clause: ensure both token and user exist
     if (!token || typeof token !== 'string' || token.trim().length === 0) {
       console.log('⚠️ [AttendanceContext] Token is missing or invalid - skipping history fetch');
       return [];
     }
 
-    if (!user?.email || typeof user.email !== 'string' || user.email.trim().length === 0) {
-      console.log('⚠️ [AttendanceContext] User email is missing or invalid - skipping history fetch');
+    // Determine identifier to request history with: prefer provided override, then UUID `user.id`, fallback to `user.email`
+    const identifier = identifierOverride || user?.id || user?.email;
+    if (!identifier || typeof identifier !== 'string' || identifier.trim().length === 0) {
+      console.log('⚠️ [AttendanceContext] User identifier is missing or invalid - skipping history fetch');
       return [];
     }
 
     try {
-      console.log(`📡 [AttendanceContext] Requesting history for user email: ${user.email}`);
+      console.log(`📡 [AttendanceContext] Requesting history for user identifier: ${identifier}`);
       // Pass token explicitly to ensure active in-memory token is used
-      // Use email instead of numeric ID for backend lookup
-      const data = await apiFetch<any[]>(`/attendance/user/${user.email}`, { token });
+      // Backend accepts either userId (UUID) or email in this route
+      const data = await apiFetch<any[]>(`/attendance/user/${identifier}`, { token });
       console.log(`✅ [AttendanceContext] Received ${data?.length || 0} attendance records.`);
       console.log(`📋 [AttendanceContext] Raw records:`, JSON.stringify(data?.slice(0, 2) || [], null, 2));
 
@@ -88,7 +90,7 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
       console.error('❌ [AttendanceContext] Failed to fetch history:', error);
       return [];
     }
-  }, [user?.email, token, resetSession]);
+  }, [user?.id, user?.email, token, resetSession]);
 
   useEffect(() => {
     if (user?.id && token) {
@@ -130,12 +132,19 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
 
           console.log('✅ [AttendanceContext] Check-in successful:', response);
 
-          // Fetch updated history in background (don't wait, fire-and-forget)
-          // Add small delay to ensure DB writes are complete
+          // Fetch updated history in background for the affected guard(s)
+          // Prefer identifier from the created attendance record (employeeId or userId) so coordinator sees the guard's history
           setTimeout(() => {
-            fetchHistory().catch((err) => {
-              console.warn('⚠️ [AttendanceContext] Background fetchHistory failed:', err);
-            });
+            try {
+              const target = Array.isArray(response.data) && response.data.length > 0
+                ? (response.data[0]?.user?.employeeId || response.data[0]?.userId || response.data[0]?.user?.id)
+                : undefined;
+              fetchHistory(target).catch((err) => {
+                console.warn('⚠️ [AttendanceContext] Background fetchHistory failed:', err);
+              });
+            } catch (err) {
+              console.warn('⚠️ [AttendanceContext] Unable to determine target identifier for background fetch', err);
+            }
           }, 500); // 500ms delay to allow DB write to complete
 
           return {
